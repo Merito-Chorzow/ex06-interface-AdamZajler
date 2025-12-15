@@ -6,6 +6,8 @@ typedef struct {
     float setpoint;
     unsigned ticks;
     unsigned broken_lines; // linie ucięte przez overflow
+    size_t last_dropped;
+    unsigned rate_period;
 } shell_t;
 
 void shell_init(shell_t* sh);

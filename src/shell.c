@@ -13,6 +13,8 @@ void shell_init(shell_t* sh){
     sh->setpoint = 0.0f;
     sh->ticks = 0;
     sh->broken_lines = 0;
+    sh->last_dropped = 0;
+    sh->rate_period = 0;
     tx_str(sh, "READY\r\n");
 }
 
@@ -44,6 +46,11 @@ static void process_line(shell_t* sh, const char* line){
         tx_str(sh, "ECHO ");
         tx_str(sh, line+5);
         tx_str(sh, "\r\n");
+    } else if (strncmp(line,"rate ",5)==0){
+        int val = atoi(line+5);
+        sh->rate_period = (unsigned)val;
+        char buf[64]; snprintf(buf,sizeof(buf),"OK rate=%u\r\n", sh->rate_period);
+        tx_str(sh, buf);
     } else {
         tx_str(sh, "ERR\r\n");
     }
@@ -51,6 +58,12 @@ static void process_line(shell_t* sh, const char* line){
 
 void shell_tick(shell_t* sh){
     sh->ticks++;
+
+    if (sh->rate_period > 0 && (sh->ticks % sh->rate_period == 0)) {
+        char buf[96];
+        snprintf(buf,sizeof(buf),"[RATE] set=%.3f ticks=%u\r\n", sh->setpoint, sh->ticks);
+        tx_str(sh, buf);
+    }
 
     static char line[128];
     static size_t n = 0;
@@ -76,6 +89,13 @@ void shell_tick(shell_t* sh){
 
     // heurystyka: jeśli był overflow (rx.dropped>0) i nie domknęliśmy linii,
     // a w kolejnych tickach pojawia się początek nowej komendy — rośnie broken_lines.
+    if (sh->rx.dropped > sh->last_dropped) {
+        if (n > 0) {
+            sh->broken_lines++;
+            n = 0;
+        }
+        sh->last_dropped = sh->rx.dropped;
+    }
     (void)saw_newline;
 
     // "wysyłka" — w urządzeniu byłby UART; tu wypisujemy na stdout
